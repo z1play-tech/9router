@@ -34,7 +34,7 @@ PORT="$PORT" \
 HOSTNAME="$HOSTNAME" \
 BASE_URL="$BASE_URL" \
 NEXT_PUBLIC_BASE_URL="$BASE_URL" \
-nohup npm run start > "$LOG_FILE" 2>&1 &
+nohup npm run start -- --hostname "$HOSTNAME" --port "$PORT" > "$LOG_FILE" 2>&1 &
 
 PID="$!"
 echo "9Router started: http://localhost:${PORT}/dashboard"
