@@ -68,6 +68,16 @@ export function createSSEStream(options = {}) {
   let currentOpenAIResponsesEvent = null;
   let openAIResponsesTerminalSeen = false;
   let openAIResponsesDoneSent = false;
+  let doneSent = false;
+
+  const emitDone = (controller) => {
+    if (doneSent) return false;
+    const doneOutput = "data: [DONE]\n\n";
+    reqLogger?.appendConvertedChunk?.(doneOutput);
+    controller.enqueue(sharedEncoder.encode(doneOutput));
+    doneSent = true;
+    return true;
+  };
 
   return new TransformStream({
     transform(chunk, controller) {
@@ -208,10 +218,7 @@ export function createSSEStream(options = {}) {
             sseEmittedCount++;
           }
 
-          const output = "data: [DONE]\n\n";
-          reqLogger?.appendConvertedChunk?.(output);
-          controller.enqueue(sharedEncoder.encode(output));
-          if (keepsOpenAIResponsesFormat) openAIResponsesDoneSent = true;
+          if (emitDone(controller) && keepsOpenAIResponsesFormat) openAIResponsesDoneSent = true;
           continue;
         }
 
@@ -340,9 +347,7 @@ export function createSSEStream(options = {}) {
           // Some clients (e.g. OpenClaw) expect the OpenAI-style sentinel:
           //   data: [DONE]\n\n
           // Without it they can hang until timeout and trigger failover.
-          const doneOutput = "data: [DONE]\n\n";
-          reqLogger?.appendConvertedChunk?.(doneOutput);
-          controller.enqueue(sharedEncoder.encode(doneOutput));
+          emitDone(controller);
 
           if (onStreamComplete) {
             onStreamComplete({
@@ -404,9 +409,7 @@ export function createSSEStream(options = {}) {
         }
 
         if (!keepsOpenAIResponsesFormat || !openAIResponsesDoneSent) {
-          const doneOutput = "data: [DONE]\n\n";
-          reqLogger?.appendConvertedChunk?.(doneOutput);
-          controller.enqueue(sharedEncoder.encode(doneOutput));
+          if (emitDone(controller) && keepsOpenAIResponsesFormat) openAIResponsesDoneSent = true;
         }
 
         if (!hasValidUsage(state?.usage) && totalContentLength > 0) {
