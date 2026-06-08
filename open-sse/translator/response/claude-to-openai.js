@@ -42,9 +42,11 @@ export function claudeToOpenAIResponse(chunk, state) {
       if (block?.type === "text") {
         state.textBlockStarted = true;
       } else if (block?.type === "thinking") {
+        // Cursor's OpenAI-compatible tool loop does not reliably round-trip
+        // Claude thinking/reasoning blocks. Suppress them so assistant turns
+        // only contain standard content/tool_calls fields.
         state.inThinkingBlock = true;
         state.currentBlockIndex = chunk.index;
-        results.push(createChunk(state, { content: "<think>" }));
       } else if (block?.type === "tool_use") {
         const toolCallIndex = state.toolCallIndex++;
         // Restore original tool name from mapping (Claude OAuth)
@@ -71,7 +73,7 @@ export function claudeToOpenAIResponse(chunk, state) {
       if (delta?.type === "text_delta" && delta.text) {
         results.push(createChunk(state, { content: delta.text }));
       } else if (delta?.type === "thinking_delta" && delta.thinking) {
-        results.push(createChunk(state, { reasoning_content: delta.thinking }));
+        // Intentionally suppressed for OpenAI/Cursor compatibility.
       } else if (delta?.type === "input_json_delta" && delta.partial_json) {
         const toolCall = state.toolCalls.get(chunk.index);
         if (toolCall) {
@@ -95,7 +97,6 @@ export function claudeToOpenAIResponse(chunk, state) {
         break;
       }
       if (state.inThinkingBlock && chunk.index === state.currentBlockIndex) {
-        results.push(createChunk(state, { content: "</think>" }));
         state.inThinkingBlock = false;
       }
       state.textBlockStarted = false;
