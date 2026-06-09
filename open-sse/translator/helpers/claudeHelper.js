@@ -4,6 +4,61 @@ import { adjustMaxTokens } from "./maxTokensHelper.js";
 import { applyCloaking } from "../../utils/claudeCloaking.js";
 import { deriveSessionId } from "../../utils/sessionManager.js";
 
+function normalizeToolResultContent(content) {
+  if (typeof content === "string") return content;
+  if (content == null) return "";
+
+  if (Array.isArray(content)) {
+    const parts = [];
+    for (const part of content) {
+      if (typeof part === "string") {
+        if (part) parts.push(part);
+      } else if (part?.type === "text" && typeof part.text === "string") {
+        if (part.text) parts.push(part.text);
+      } else if (part?.type === "output_text" && typeof part.text === "string") {
+        if (part.text) parts.push(part.text);
+      } else if (part?.type === "input_text" && typeof part.text === "string") {
+        if (part.text) parts.push(part.text);
+      } else if (part?.type === "tool_result") {
+        const nested = normalizeToolResultContent(part.content);
+        if (nested) parts.push(nested);
+      } else if (part?.toolResult) {
+        const nested = normalizeToolResultContent(part.toolResult.content);
+        if (nested) parts.push(nested);
+      } else if (part?.toolUseId && part?.content !== undefined) {
+        const nested = normalizeToolResultContent(part.content);
+        if (nested) parts.push(nested);
+      }
+    }
+    const text = parts.join("\n");
+    return text || JSON.stringify(content);
+  }
+
+  if (typeof content === "object") {
+    if (typeof content.text === "string") return content.text;
+    if (typeof content.output === "string") return content.output;
+    if (typeof content.value === "string") return content.value;
+    return JSON.stringify(content);
+  }
+
+  return String(content);
+}
+
+function normalizeClaudeToolResults(messages) {
+  if (!Array.isArray(messages)) return messages;
+
+  for (const msg of messages) {
+    if (!Array.isArray(msg.content)) continue;
+    for (const block of msg.content) {
+      if (block?.type === "tool_result") {
+        block.content = normalizeToolResultContent(block.content);
+      }
+    }
+  }
+
+  return messages;
+}
+
 // Check if message has valid non-empty content
 export function hasValidContent(msg) {
   if (typeof msg.content === "string" && msg.content.trim()) return true;
@@ -104,6 +159,8 @@ export function prepareClaudeRequest(body, provider = null, apiKey = null, conne
 
   // 2. Messages: process in optimized passes
   if (body.messages && Array.isArray(body.messages)) {
+    normalizeClaudeToolResults(body.messages);
+
     const len = body.messages.length;
     let filtered = [];
 

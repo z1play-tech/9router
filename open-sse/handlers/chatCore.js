@@ -1,5 +1,6 @@
 import { detectFormat, getTargetFormat } from "../services/provider.js";
 import { translateRequest } from "../translator/index.js";
+import { prepareClaudeRequest } from "../translator/helpers/claudeHelper.js";
 import { FORMATS } from "../translator/formats.js";
 import { COLORS } from "../utils/stream.js";
 import { createStreamController } from "../utils/streamHandler.js";
@@ -91,6 +92,10 @@ export async function handleChatCore({ body, modelInfo, credentials, log, onCred
   if (passthrough) {
     log?.debug?.("PASSTHROUGH", `${clientTool} → ${provider} | native lossless`);
     translatedBody = { ...body, model: upstreamModel };
+    if (targetFormat === FORMATS.CLAUDE) {
+      const apiKeyForCloaking = credentials?.accessToken || credentials?.apiKey || null;
+      translatedBody = prepareClaudeRequest(translatedBody, provider, apiKeyForCloaking, connectionId);
+    }
   } else {
     translatedBody = translateRequest(sourceFormat, targetFormat, upstreamModel, body, stream, credentials, provider, reqLogger, stripList, connectionId, clientTool);
     if (!translatedBody) {

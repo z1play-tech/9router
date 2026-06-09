@@ -232,6 +232,13 @@ function getContentBlocksFromMessage(msg, toolNameMap = new Map()) {
             content: normalizeToolResultContent(part.content),
             ...(part.is_error && { is_error: part.is_error })
           });
+        } else if (part.toolResult) {
+          blocks.push({
+            type: "tool_result",
+            tool_use_id: part.toolResult.toolUseId,
+            content: normalizeToolResultContent(part.toolResult.content),
+            ...(part.toolResult.status === "error" && { is_error: true })
+          });
         } else if (part.type === "image_url") {
           const url = part.image_url.url;
           const match = url.match(/^data:([^;]+);base64,(.+)$/);
@@ -345,7 +352,15 @@ function normalizeToolResultContent(content) {
         if (part.text) parts.push(part.text);
       } else if (part?.type === "output_text" && typeof part.text === "string") {
         if (part.text) parts.push(part.text);
+      } else if (part?.type === "input_text" && typeof part.text === "string") {
+        if (part.text) parts.push(part.text);
       } else if (part?.type === "tool_result") {
+        const nested = normalizeToolResultContent(part.content);
+        if (nested) parts.push(nested);
+      } else if (part?.toolResult) {
+        const nested = normalizeToolResultContent(part.toolResult.content);
+        if (nested) parts.push(nested);
+      } else if (part?.toolUseId && part?.content !== undefined) {
         const nested = normalizeToolResultContent(part.content);
         if (nested) parts.push(nested);
       }

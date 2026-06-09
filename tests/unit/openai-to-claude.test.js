@@ -8,6 +8,7 @@
 
 import { describe, it, expect } from "vitest";
 import { openaiToClaudeRequest } from "../../open-sse/translator/request/openai-to-claude.js";
+import { prepareClaudeRequest } from "../../open-sse/translator/helpers/claudeHelper.js";
 import { openaiToClaudeResponse } from "../../open-sse/translator/response/openai-to-claude.js";
 
 describe("openaiToClaudeRequest", () => {
@@ -158,6 +159,55 @@ describe("openaiToClaudeRequest", () => {
         .find(block => block.type === "tool_result");
 
       expect(toolResult.content).toBe("HELLO_WORLD_123");
+    });
+
+    it("normalizes Claude-native array tool_result content during request preparation", () => {
+      const result = prepareClaudeRequest({
+        messages: [
+          { role: "assistant", content: [{ type: "tool_use", id: "call_echo", name: "Shell", input: {} }] },
+          { role: "user", content: [{ type: "tool_result", tool_use_id: "call_echo", content: [{ type: "text", text: "HELLO_WORLD_123" }] }] },
+        ],
+      }, "claude");
+
+      const toolResult = result.messages
+        .flatMap(message => message.content || [])
+        .find(block => block.type === "tool_result");
+
+      expect(toolResult.content).toBe("HELLO_WORLD_123");
+    });
+
+    it("converts Bedrock Converse toolResult blocks to Claude-native tool_result", () => {
+      const result = openaiToClaudeRequest("claude-sonnet-4.5", {
+        messages: [
+          { role: "assistant", content: [{ type: "tool_use", id: "toolu_bedrock", name: "Shell", input: {} }] },
+          { role: "user", content: [{ toolResult: { toolUseId: "toolu_bedrock", status: "success", content: [{ text: "BEDROCK_RESULT_123" }] } }] },
+        ],
+      }, false);
+
+      const toolResult = result.messages
+        .flatMap(message => message.content || [])
+        .find(block => block.type === "tool_result");
+
+      expect(toolResult).toMatchObject({
+        type: "tool_result",
+        tool_use_id: "toolu_bedrock",
+        content: "BEDROCK_RESULT_123",
+      });
+    });
+
+    it("normalizes Bedrock Converse toolResult content during request preparation", () => {
+      const result = prepareClaudeRequest({
+        messages: [
+          { role: "assistant", content: [{ type: "tool_use", id: "toolu_bedrock", name: "Shell", input: {} }] },
+          { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_bedrock", content: [{ toolUseId: "toolu_bedrock", status: "success", content: [{ text: "BEDROCK_RESULT_123" }] }] }] },
+        ],
+      }, "claude");
+
+      const toolResult = result.messages
+        .flatMap(message => message.content || [])
+        .find(block => block.type === "tool_result");
+
+      expect(toolResult.content).toBe("BEDROCK_RESULT_123");
     });
   });
 
