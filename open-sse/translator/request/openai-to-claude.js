@@ -214,7 +214,7 @@ function getContentBlocksFromMessage(msg, toolNameMap = new Map()) {
     blocks.push({
       type: "tool_result",
       tool_use_id: msg.tool_call_id,
-      content: msg.content
+      content: normalizeToolResultContent(msg.content)
     });
   } else if (msg.role === "user") {
     if (typeof msg.content === "string") {
@@ -229,7 +229,7 @@ function getContentBlocksFromMessage(msg, toolNameMap = new Map()) {
           blocks.push({
             type: "tool_result",
             tool_use_id: part.tool_use_id,
-            content: part.content,
+            content: normalizeToolResultContent(part.content),
             ...(part.is_error && { is_error: part.is_error })
           });
         } else if (part.type === "image_url") {
@@ -330,6 +330,38 @@ function extractTextContent(content) {
     return content.filter(c => c.type === "text").map(c => c.text).join("\n");
   }
   return "";
+}
+
+function normalizeToolResultContent(content) {
+  if (typeof content === "string") return content;
+  if (content == null) return "";
+
+  if (Array.isArray(content)) {
+    const parts = [];
+    for (const part of content) {
+      if (typeof part === "string") {
+        if (part) parts.push(part);
+      } else if (part?.type === "text" && typeof part.text === "string") {
+        if (part.text) parts.push(part.text);
+      } else if (part?.type === "output_text" && typeof part.text === "string") {
+        if (part.text) parts.push(part.text);
+      } else if (part?.type === "tool_result") {
+        const nested = normalizeToolResultContent(part.content);
+        if (nested) parts.push(nested);
+      }
+    }
+    const text = parts.join("\n");
+    return text || JSON.stringify(content);
+  }
+
+  if (typeof content === "object") {
+    if (typeof content.text === "string") return content.text;
+    if (typeof content.output === "string") return content.output;
+    if (typeof content.value === "string") return content.value;
+    return JSON.stringify(content);
+  }
+
+  return String(content);
 }
 
 // Try parse JSON

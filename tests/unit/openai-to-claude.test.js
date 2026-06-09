@@ -123,6 +123,44 @@ describe("openaiToClaudeRequest", () => {
     });
   });
 
+  describe("tool result handling", () => {
+    it("preserves string tool output when converting OpenAI tool messages", () => {
+      const result = openaiToClaudeRequest("claude-sonnet-4.5", {
+        messages: [
+          { role: "user", content: "test echo" },
+          { role: "assistant", content: null, tool_calls: [{ id: "call_echo", type: "function", function: { name: "Shell", arguments: "{}" } }] },
+          { role: "tool", tool_call_id: "call_echo", content: "HELLO_WORLD_123" },
+        ],
+      }, false);
+
+      const toolResult = result.messages
+        .flatMap(message => message.content || [])
+        .find(block => block.type === "tool_result");
+
+      expect(toolResult).toMatchObject({
+        type: "tool_result",
+        tool_use_id: "call_echo",
+        content: "HELLO_WORLD_123",
+      });
+    });
+
+    it("normalizes OpenAI-style array tool output to Claude text content", () => {
+      const result = openaiToClaudeRequest("claude-sonnet-4.5", {
+        messages: [
+          { role: "user", content: "test echo" },
+          { role: "assistant", content: null, tool_calls: [{ id: "call_echo", type: "function", function: { name: "Shell", arguments: "{}" } }] },
+          { role: "tool", tool_call_id: "call_echo", content: [{ type: "text", text: "HELLO_WORLD_123" }] },
+        ],
+      }, false);
+
+      const toolResult = result.messages
+        .flatMap(message => message.content || [])
+        .find(block => block.type === "tool_result");
+
+      expect(toolResult.content).toBe("HELLO_WORLD_123");
+    });
+  });
+
   describe("tool_choice handling", () => {
     const baseBody = {
       messages: [{ role: "user", content: "add a todo" }],
