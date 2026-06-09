@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { claudeToOpenAIResponse } from "../../open-sse/translator/response/claude-to-openai.js";
 import { FORMATS } from "../../open-sse/translator/formats.js";
 import { createSSETransformStreamWithLogger } from "../../open-sse/utils/stream.js";
 
@@ -65,5 +66,26 @@ describe("Claude to OpenAI SSE termination", () => {
     expect(output).toContain("I'll check that for you.");
     expect(output).toContain('"tool_calls"');
     expect(output.match(/data: \[DONE\]/g)).toHaveLength(1);
+  });
+
+  it("emits empty JSON arguments for zero-argument Claude tool calls", () => {
+    const state = {
+      messageId: null,
+      model: null,
+      toolCallIndex: 0,
+      toolCalls: new Map(),
+      finishReasonSent: false,
+    };
+    const chunks = [
+      { type: "message_start", message: { id: "msg_empty_args", model: "claude-opus-4.8" } },
+      { type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "toolu_empty", name: "list_files", input: {} } },
+      { type: "content_block_stop", index: 0 },
+      { type: "message_delta", delta: { stop_reason: "tool_use" } },
+      { type: "message_stop" },
+    ];
+
+    const output = chunks.flatMap((chunk) => claudeToOpenAIResponse(chunk, state) || []);
+
+    expect(JSON.stringify(output)).toContain('"arguments":"{}"');
   });
 });

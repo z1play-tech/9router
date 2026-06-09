@@ -51,17 +51,30 @@ export function claudeToOpenAIResponse(chunk, state) {
         const toolCallIndex = state.toolCallIndex++;
         // Restore original tool name from mapping (Claude OAuth)
         const toolName = state.toolNameMap?.get(block.name) || block.name;
+        const initialArguments = block.input && Object.keys(block.input).length > 0
+          ? JSON.stringify(block.input)
+          : "";
         const toolCall = {
           index: toolCallIndex,
           id: block.id,
           type: "function",
           function: {
             name: toolName,
-            arguments: ""
+            arguments: initialArguments
+          },
+          _hasArgumentDelta: false
+        };
+        const deltaToolCall = {
+          index: toolCall.index,
+          id: toolCall.id,
+          type: "function",
+          function: {
+            name: toolCall.function.name,
+            arguments: initialArguments
           }
         };
         state.toolCalls.set(chunk.index, toolCall);
-        results.push(createChunk(state, { tool_calls: [toolCall] }));
+        results.push(createChunk(state, { tool_calls: [deltaToolCall] }));
       }
       break;
     }
@@ -77,6 +90,7 @@ export function claudeToOpenAIResponse(chunk, state) {
       } else if (delta?.type === "input_json_delta" && delta.partial_json) {
         const toolCall = state.toolCalls.get(chunk.index);
         if (toolCall) {
+          toolCall._hasArgumentDelta = true;
           toolCall.function.arguments += delta.partial_json;
           results.push(createChunk(state, {
             tool_calls: [{
@@ -95,6 +109,17 @@ export function claudeToOpenAIResponse(chunk, state) {
       if (chunk.index === state.serverToolBlockIndex) {
         state.serverToolBlockIndex = -1;
         break;
+      }
+      const toolCall = state.toolCalls.get(chunk.index);
+      if (toolCall && !toolCall._hasArgumentDelta && toolCall.function.arguments === "") {
+        toolCall.function.arguments = "{}";
+        results.push(createChunk(state, {
+          tool_calls: [{
+            index: toolCall.index,
+            id: toolCall.id,
+            function: { arguments: "{}" }
+          }]
+        }));
       }
       if (state.inThinkingBlock && chunk.index === state.currentBlockIndex) {
         state.inThinkingBlock = false;
